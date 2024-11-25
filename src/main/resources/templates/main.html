@@ -1,14 +1,448 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Image to GIF Converter</title>
+    <title>Mosaic Image Editor</title>
+    <style>
+        #canvas-container {
+            position: relative;
+            display: flex;
+        }
+
+        canvas {
+            border: 1px solid #ccc;
+        }
+
+        #controls {
+            margin-left: 20px;
+        }
+    </style>
 </head>
+
 <body>
     <h1>Upload Your Image</h1>
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept="image/*" required>
-        <button type="submit">Upload</button>
-    </form>
+    <input type="file" id="image-file" accept="image/*" />
+    <button id="upload-button">Upload</button>
+
+    <!-- 추가 설정 입력 -->
+    <div id="controls">
+        <label for="steps">장수:</label>
+        <input type="number" id="steps" value="20" min="1" />
+
+        <label for="totalDuration">시간(ms):</label>
+        <input type="number" id="totalDuration" value="20000" min="1000" />
+
+        <label for="initialBlockSize">최소 블럭:</label>
+        <input type="number" id="initialBlockSize" value="1" min="1" />
+
+        <label for="maxBlockSize">최대 블럭:</label>
+        <input type="number" id="maxBlockSize" value="200" min="1" />
+
+        <label for="weight">가중치:</label>
+        <input type="number" id="weight" value="1.5" step="0.1" min="0.1" />
+
+        <label><input type="checkbox" id="mosaic-effect"> 모자이크 효과</label>
+        <label><input type="checkbox" id="transparency-effect"> 반투명 효과</label>
+        <label><input type="checkbox" id="blurEffect-effect"> 블러 효과</label>
+
+
+        <!-- 구역 체크박스 추가 -->
+        <div>
+            <label><input type="checkbox" id="select-all"> 전체 영역 선택</label>
+        </div>
+    </div>
+    <div>
+        <label for="stamp-width">스탬프 너비:</label>
+        <input type="number" id="stamp-width" value="50" min="10" />
+        <label for="stamp-height">스탬프 높이:</label>
+        <input type="number" id="stamp-height" value="50" min="10" />
+        <div>
+            <label>스탬프 모양:</label>
+            <label><input type="radio" name="stamp-shape" value="rectangle" checked> 사각형</label>
+            <label><input type="radio" name="stamp-shape" value="circle"> 원형</label>
+            <label><input type="radio" name="stamp-shape" value="triangle"> 삼각형</label>
+        </div>
+
+    </div>
+
+    <button id="process-button">Process Selected Area</button>
+    <div id="canvas-container">
+        <canvas id="image-canvas"></canvas>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById("image-file");
+        const processButton = document.getElementById("process-button");
+        const canvas = document.getElementById("image-canvas");
+        const ctx = canvas.getContext("2d");
+        const selectedRegions = [];
+        let isDrawing = false;
+        let currentPath = [];
+        const uploadButton = document.getElementById("upload-button");
+
+        let uploadedImage = null; // 업로드된 이미지를 저장
+
+        // 사용자 입력 요소
+        const stepsInput = document.getElementById("steps");
+        const totalDurationInput = document.getElementById("totalDuration");
+        const initialBlockSizeInput = document.getElementById("initialBlockSize");
+        const maxBlockSizeInput = document.getElementById("maxBlockSize");
+        const weightInput = document.getElementById("weight");
+        const selectAllCheckbox = document.getElementById("select-all");
+
+        let stampWidth = parseInt(document.getElementById("stamp-width").value); // 스탬프 너비
+        let stampHeight = parseInt(document.getElementById("stamp-height").value); // 스탬프 높이
+        const stampWidthInput = document.getElementById("stamp-width");
+        const stampHeightInput = document.getElementById("stamp-height");
+
+        stampWidthInput.addEventListener("input", () => {
+            stampWidth = parseInt(stampWidthInput.value);
+        });
+
+        stampHeightInput.addEventListener("input", () => {
+            stampHeight = parseInt(stampHeightInput.value);
+        });
+
+        // 스탬프 모양 선택 요소
+        let stampShape = "rectangle";
+        const stampShapeInputs = document.querySelectorAll('input[name="stamp-shape"]');
+        stampShapeInputs.forEach((input) => {
+            input.addEventListener("change", (e) => {
+                stampShape = e.target.value;
+            });
+        });
+
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // 캔버스 지우기
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 업로드된 이미지 다시 그리기
+            if (uploadedImage) {
+                ctx.drawImage(uploadedImage, 0, 0);
+            }
+
+            // 이미 선택된 영역 다시 그리기
+            selectedRegions.forEach((region) => {
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 2;
+                switch (region.shape) {
+                    case "rectangle":
+                        ctx.strokeRect(region.x, region.y, region.width, region.height);
+                        break;
+                    case "circle":
+                        ctx.beginPath();
+                        ctx.arc(
+                            region.x + region.width / 2,
+                            region.y + region.height / 2,
+                            Math.min(region.width, region.height) / 2,
+                            0,
+                            2 * Math.PI
+                        );
+                        ctx.stroke();
+                        break;
+                    case "triangle":
+                        ctx.beginPath();
+                        ctx.moveTo(region.x + region.width / 2, region.y);
+                        ctx.lineTo(region.x, region.y + region.height);
+                        ctx.lineTo(region.x + region.width, region.y + region.height);
+                        ctx.closePath();
+                        ctx.stroke();
+                        break;
+                }
+            });
+
+            // 현재 마우스 위치에 스탬프 미리보기
+            ctx.strokeStyle = "blue";
+            ctx.lineWidth = 1;
+            switch (stampShape) {
+                case "rectangle":
+                    ctx.strokeRect(x - stampWidth / 2, y - stampHeight / 2, stampWidth, stampHeight);
+                    break;
+                case "circle":
+                    ctx.beginPath();
+                    ctx.arc(x, y, Math.min(stampWidth, stampHeight) / 2, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    break;
+                case "triangle":
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - stampHeight / 2); // 위쪽 점
+                    ctx.lineTo(x - stampWidth / 2, y + stampHeight / 2); // 왼쪽 아래 점
+                    ctx.lineTo(x + stampWidth / 2, y + stampHeight / 2); // 오른쪽 아래 점
+                    ctx.closePath();
+                    ctx.stroke();
+                    break;
+            }
+        });
+
+        canvas.addEventListener("click", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            let region;
+    switch (stampShape) {
+        case "rectangle":
+            region = {
+                x: Math.round(x - stampWidth / 2),
+                y: Math.round(y - stampHeight / 2),
+                width: stampWidth,
+                height: stampHeight,
+                shape: "rectangle",
+            };
+            break;
+        case "circle":
+            region = {
+                x: Math.round(x - stampWidth / 2), // 원의 시작점 (bounding box)
+                y: Math.round(y - stampHeight / 2),
+                width: stampWidth,
+                height: stampHeight,
+                shape: "circle",
+            };
+            break;
+        case "triangle":
+            region = {
+                x: Math.round(x - stampWidth / 2), // 삼각형의 기준점 (bounding box)
+                y: Math.round(y - stampHeight / 2),
+                width: stampWidth,
+                height: stampHeight,
+                shape: "triangle",
+                rotation: triangleRotation, // 삼각형 회전 각도 추가
+            };
+            break;
+    }
+    selectedRegions.push(region);
+
+ // 캔버스에 스탬프 표시
+ ctx.strokeStyle = "red";
+    ctx.lineWidth = 2;
+    switch (stampShape) {
+        case "rectangle":
+            ctx.strokeRect(region.x, region.y, region.width, region.height);
+            break;
+        case "circle":
+            ctx.beginPath();
+            ctx.ellipse(
+                region.x + region.width / 2,
+                region.y + region.height / 2,
+                region.width / 2,
+                region.height / 2,
+                0,
+                0,
+                2 * Math.PI
+            );
+            ctx.stroke();
+            break;
+        case "triangle":
+            rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, triangleRotation, () => {
+                ctx.beginPath();
+                ctx.moveTo(0, -region.height / 2); // 위쪽 점
+                ctx.lineTo(-region.width / 2, region.height / 2); // 왼쪽 아래 점
+                ctx.lineTo(region.width / 2, region.height / 2); // 오른쪽 아래 점
+                ctx.closePath();
+                ctx.stroke();
+            });
+            break;
+    }
+});
+
+        uploadButton.addEventListener("click", () => {
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select an image file.");
+                return;
+            }
+
+            const img = new Image();
+            img.onload = () => {
+                // 캔버스 크기를 이미지 크기에 맞춤
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                // 이미지 캔버스에 그리기
+                ctx.drawImage(img, 0, 0);
+
+                // 업로드된 이미지를 저장
+                uploadedImage = img;
+            };
+            img.src = URL.createObjectURL(file);
+        });
+
+        // 전체 영역 선택 체크박스 처리
+        selectAllCheckbox.addEventListener("change", (e) => {
+            selectedRegions.length = 0; // 기존 구역 제거
+            if (e.target.checked) {
+                // 캔버스 전체를 선택
+                const region = {
+                    x: 0,
+                    y: 0,
+                    width: canvas.width,
+                    height: canvas.height,
+                    shape: "rectangle",
+                };
+                selectedRegions.push(region);
+
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(region.x, region.y, region.width, region.height);
+            } else {
+                // 구역 해제
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // 다시 이미지 그리기
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = fileInput.files[0] ? URL.createObjectURL(fileInput.files[0]) : "";
+            }
+        });
+
+        // 처리 버튼 이벤트
+        processButton.addEventListener("click", () => {
+            const file = fileInput.files[0];
+            if (!file) {
+                alert("Please select an image file.");
+                return;
+            }
+
+            if (selectedRegions.length === 0) {
+                alert("Please stamp at least one region.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("regions", JSON.stringify(selectedRegions));
+
+            // 사용자 입력 값 추가
+            formData.append("steps", parseInt(stepsInput.value));
+            formData.append("totalDuration", parseInt(totalDurationInput.value));
+            formData.append("initialBlockSize", parseInt(initialBlockSizeInput.value));
+            formData.append("maxBlockSize", parseInt(maxBlockSizeInput.value));
+            formData.append("weight", parseFloat(weightInput.value));
+            formData.append("mosaicEffect", document.getElementById("mosaic-effect").checked);
+            formData.append("transparencyEffect", document.getElementById("transparency-effect").checked);
+            formData.append("blurEffect", document.getElementById("blurEffect-effect").checked);
+
+            fetch("/upload", {
+                method: "POST",
+                body: formData,
+            })
+                .then((response) => response.blob())
+                .then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement("a");
+                    link.href = url;
+                    link.download = "output.webp";
+                    link.click();
+                })
+                .catch(console.error);
+
+            console.log("Selected regions:", selectedRegions);
+            console.log("Serialized JSON:", JSON.stringify(selectedRegions));
+        });
+
+
+        // 회전 함수 추가
+function rotateShape(ctx, x, y, angle, drawFn) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((angle * Math.PI) / 180);
+    drawFn();
+    ctx.restore();
+}
+
+// 삼각형 회전 각도 추가
+let triangleRotation = 0; // 기본 각도 0
+const triangleRotationInput = document.createElement("input");
+triangleRotationInput.type = "number";
+triangleRotationInput.value = "0";
+triangleRotationInput.min = "0";
+triangleRotationInput.max = "360";
+triangleRotationInput.step = "1";
+triangleRotationInput.addEventListener("input", () => {
+    triangleRotation = parseInt(triangleRotationInput.value);
+});
+document.getElementById("controls").appendChild(document.createElement("br"));
+document.getElementById("controls").appendChild(document.createTextNode("삼각형 회전 각도:"));
+document.getElementById("controls").appendChild(triangleRotationInput);
+
+// 캔버스 그리기 로직 업데이트
+canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (uploadedImage) {
+        ctx.drawImage(uploadedImage, 0, 0);
+    }
+
+    selectedRegions.forEach((region) => {
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        switch (region.shape) {
+            case "rectangle":
+                ctx.strokeRect(region.x, region.y, region.width, region.height);
+                break;
+            case "circle":
+                ctx.beginPath();
+                ctx.ellipse(
+                    region.x + region.width / 2,
+                    region.y + region.height / 2,
+                    region.width / 2,
+                    region.height / 2,
+                    0,
+                    0,
+                    2 * Math.PI
+                );
+                ctx.stroke();
+                break;
+            case "triangle":
+                rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, triangleRotation, () => {
+                    ctx.beginPath();
+                    ctx.moveTo(0, -region.height / 2); // 위쪽 점
+                    ctx.lineTo(-region.width / 2, region.height / 2); // 왼쪽 아래 점
+                    ctx.lineTo(region.width / 2, region.height / 2); // 오른쪽 아래 점
+                    ctx.closePath();
+                    ctx.stroke();
+                });
+                break;
+        }
+    });
+
+    ctx.strokeStyle = "blue";
+    ctx.lineWidth = 1;
+    switch (stampShape) {
+        case "rectangle":
+            ctx.strokeRect(x - stampWidth / 2, y - stampHeight / 2, stampWidth, stampHeight);
+            break;
+        case "circle":
+            ctx.beginPath();
+            ctx.ellipse(x, y, stampWidth / 2, stampHeight / 2, 0, 0, 2 * Math.PI);
+            ctx.stroke();
+            break;
+        case "triangle":
+            rotateShape(ctx, x, y, triangleRotation, () => {
+                ctx.beginPath();
+                ctx.moveTo(0, -stampHeight / 2); // 위쪽 점
+                ctx.lineTo(-stampWidth / 2, stampHeight / 2); // 왼쪽 아래 점
+                ctx.lineTo(stampWidth / 2, stampHeight / 2); // 오른쪽 아래 점
+                ctx.closePath();
+                ctx.stroke();
+            });
+            break;
+    }
+});
+
+    </script>
 </body>
+
+</html>
+
 </html>
