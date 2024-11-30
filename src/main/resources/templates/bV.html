@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>블러뷰어</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            background-color: black;
+        }
+
+        #photo-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-height: 100vh;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: black;
+            margin-top: 100px;
+            height: calc(100% - 140px);
+            max-height: calc(100vh - 140px);
+            margin-bottom: 5%;
+        }
+
+        img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            transition: filter 0.5s;
+        }
+
+        #settings {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #settings label {
+            margin-right: 10px;
+        }
+
+        #controls {
+            margin-top: 10px;
+        }
+
+        #header {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background-color: black;
+            z-index: 1000;
+            padding: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            /* 모바일에서 요소가 세로로 배치 */
+            align-items: center;
+            /* 중앙 정렬 */
+            text-align: center;
+            /* 텍스트 중앙 정렬 */
+        }
+
+        #header details {
+            width: 100%;
+            /* details가 화면에 꽉 차게 설정 */
+            max-width: 480px;
+            /* 너무 넓지 않도록 제한 */
+            margin: 0 auto;
+            /* 가운데 정렬 */
+            color: white;
+            /* 텍스트 색상 */
+        }
+
+        #header input,
+        #header label,
+        #header button {
+            font-size: 14px;
+            /* 모바일에서도 읽기 쉬운 크기 */
+            margin: 5px;
+            /* 간격 추가 */
+        }
+
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            /* 요소들이 화면 크기에 따라 줄바꿈 */
+            justify-content: center;
+            /* 요소들을 중앙 정렬 */
+            gap: 10px;
+            /* 간격 추가 */
+        }
+
+        #settings {
+            display: flex;
+            flex-wrap: wrap;
+            /* 설정 요소들이 화면 크기에 따라 줄바꿈 */
+            justify-content: center;
+            /* 설정 요소들을 중앙 정렬 */
+            gap: 10px;
+            /* 간격 추가 */
+        }
+
+        @media screen and (max-width: 600px) {
+            #header {
+                flex-direction: column;
+                /* 모바일에서 세로 배치 */
+            }
+
+            #header details {
+                max-width: 100%;
+                /* 작은 화면에서도 꽉 차도록 */
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="photo-container">
+        <img id="photo" src="" alt="Selected photo">
+    </div>
+    <div id="header">
+        <details>
+            <summary>설정</summary>
+            <div id="controls">
+                <input type="file" id="file-input" accept="image/*" multiple>
+                <label>
+                    <button id="reset-button">사진 리셋</button>
+                    <input type="checkbox" id="random-toggle"> 랜덤 출력
+                    <input type="checkbox" id="auto-next"> 자동 넘김
+                </label>
+            </div>
+            <div id="settings">
+
+                <input type="number" id="min-blur" style="display: none;" min="0" max="50" value="0">
+                <label for="max-blur">최대 블러 (px):</label>
+                <input type="number" id="max-blur" min="0" max="50" value="20">
+                <label for="weight">가중치 (0.1 - 2.0):</label>
+                <input type="number" id="weight" min="0.1" max="2.0" step="0.1" value="1.0">
+                <label for="min-time">최소 시간 (초):</label>
+                <input type="number" id="min-time" min="1" value="5" style="width: 60px;">
+                <label for="max-time">최대 시간 (초):</label>
+                <input type="number" id="max-time" min="1" value="20" style="width: 60px;">
+                <label for="max-time">대기 시간 (초):</label>
+                <input type="number" id="autotime" min="0" value="2" style="width: 60px;">
+
+
+            </div>
+        </details>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const photo = document.getElementById('photo');
+        const photoContainer = document.getElementById('photo-container');
+        const minBlurInput = document.getElementById('min-blur');
+        const maxBlurInput = document.getElementById('max-blur');
+        const minTimeInput = document.getElementById('min-time');
+        const maxTimeInput = document.getElementById('max-time');
+        const weightInput = document.getElementById('weight');
+        const randomToggle = document.getElementById('random-toggle');
+        const resetButton = document.getElementById('reset-button');
+        const autoNextToggle = document.getElementById('auto-next'); // 자동 넘김 체크박스
+
+
+        let photos = [];
+        let blurLevels = [];
+        let currentIndex = 0;
+        let blurInterval;
+        let randomMode = false;
+        let autoNext = false; // 자동 넘김 활성화 여부
+        let minBlur = parseInt(minBlurInput.value, 10);
+        let maxBlur = parseInt(maxBlurInput.value, 10);
+        let minTime = parseInt(minTimeInput.value, 10);
+        let maxTime = parseInt(maxTimeInput.value, 10);
+        let weight = parseFloat(weightInput.value);
+
+
+        fileInput.addEventListener('change', (event) => {
+            photos = Array.from(event.target.files).map(file => URL.createObjectURL(file));
+            blurLevels = new Array(photos.length).fill(0);
+            if (photos.length > 0) {
+                currentIndex = randomMode ? Math.floor(Math.random() * photos.length) : 0;
+                displayPhoto();
+            }
+        });
+
+        photoContainer.addEventListener('click', (event) => {
+            if (photos.length === 0) return;
+
+            if (randomMode) {
+                currentIndex = Math.floor(Math.random() * photos.length);
+            } else {
+                const clickX = event.offsetX;
+                const containerWidth = photoContainer.offsetWidth;
+                currentIndex = clickX < containerWidth / 2
+                    ? (currentIndex - 1 + photos.length) % photos.length
+                    : (currentIndex + 1) % photos.length;
+            }
+            displayPhoto();
+        });
+
+        minBlurInput.addEventListener('input', () => minBlur = parseInt(minBlurInput.value, 10) || 0);
+        maxBlurInput.addEventListener('input', () => maxBlur = parseInt(maxBlurInput.value, 10) || 0);
+        minTimeInput.addEventListener('input', () => minTime = parseInt(minTimeInput.value, 10) || 1);
+        maxTimeInput.addEventListener('input', () => maxTime = parseInt(maxTimeInput.value, 10) || 1);
+        weightInput.addEventListener('input', () => weight = parseFloat(weightInput.value) || 1.0);
+        randomToggle.addEventListener('change', () => randomMode = randomToggle.checked);
+        autoNextToggle.addEventListener('change', () => autoNext = autoNextToggle.checked);
+
+        resetButton.addEventListener('click', () => {
+            clearInterval(blurInterval);
+            photos = [];
+            blurLevels = [];
+            currentIndex = 0;
+            photo.src = '';
+        });
+
+        function displayPhoto() {
+            clearInterval(blurInterval);
+            if (photos.length === 0) return;
+            const currentBlur = blurLevels[currentIndex];
+            photo.style.filter = `blur(${currentBlur}px)`;
+            photo.src = photos[currentIndex];
+            photo.onload = () => startBlurEffect();
+        }
+
+        function startBlurEffect() {
+            const randomBlur = Math.floor(Math.random() * (maxBlur - minBlur + 1)) + minBlur;
+            const randomTime = Math.random() * (maxTime - minTime) + minTime;
+            const totalSteps = randomBlur - blurLevels[currentIndex];
+            const intervalDuration = (randomTime * 1000) / totalSteps;
+            let step = 0;
+
+            // 유저 입력 대기 시간 가져오기
+            const autoTimeInput = document.getElementById('autotime');
+            const autoWaitTime = parseInt(autoTimeInput.value, 10) * 1000 || 2000; // 기본값: 2초
+
+            blurInterval = setInterval(() => {
+                if (step >= totalSteps) {
+                    clearInterval(blurInterval);
+                    blurLevels[currentIndex] = randomBlur;
+                    if (autoNext) {
+                        setTimeout(() => {
+                            currentIndex = randomMode
+                                ? Math.floor(Math.random() * photos.length)
+                                : (currentIndex + 1) % photos.length;
+                            displayPhoto();
+                        }, autoWaitTime); // 유저 지정 대기 시간 사용
+                    }
+                } else {
+                    const progress = step / totalSteps;
+                    const adjustedStep = (progress ** weight) * randomBlur;
+                    blurLevels[currentIndex] = Math.min(randomBlur, adjustedStep);
+                    photo.style.filter = `blur(${blurLevels[currentIndex].toFixed(1)}px)`;
+                    step++;
+                }
+            }, intervalDuration);
+        }
+
+
+        document.addEventListener('keydown', (event) => {
+    if (photos.length === 0) return;
+
+    if (event.key === 'ArrowRight') {
+        // 오른쪽 화살표: 다음 이미지
+        currentIndex = randomMode 
+            ? Math.floor(Math.random() * photos.length) 
+            : (currentIndex + 1) % photos.length;
+        displayPhoto();
+    } else if (event.key === 'ArrowLeft') {
+        // 왼쪽 화살표: 이전 이미지
+        currentIndex = randomMode 
+            ? Math.floor(Math.random() * photos.length) 
+            : (currentIndex - 1 + photos.length) % photos.length;
+        displayPhoto();
+    }
+});
+
+
+
+    </script>
+</body>
+
+</html>

@@ -30,27 +30,24 @@
         <label for="steps">장수:</label>
         <input type="number" id="steps" value="20" min="1" />
 
-        <label for="totalDuration">시간(ms):</label>
-        <input type="number" id="totalDuration" value="20000" min="1000" />
+        <label for="totalDuration">시간(초):</label>
+        <input type="number" id="totalDuration" value="10" min="1" />
 
         <label for="initialBlockSize">최소 블럭:</label>
         <input type="number" id="initialBlockSize" value="1" min="1" />
 
         <label for="maxBlockSize">최대 블럭:</label>
-        <input type="number" id="maxBlockSize" value="200" min="1" />
+        <input type="number" id="maxBlockSize" value="50" min="1" max="100"/>
 
         <label for="weight">가중치:</label>
         <input type="number" id="weight" value="1.5" step="0.1" min="0.1" />
-
-        <label><input type="checkbox" id="mosaic-effect"> 모자이크 효과</label>
-        <label><input type="checkbox" id="transparency-effect"> 반투명 효과</label>
-        <label><input type="checkbox" id="blurEffect-effect"> 블러 효과</label>
-
-
-        <!-- 구역 체크박스 추가 -->
         <div>
-            <label><input type="checkbox" id="select-all"> 전체 영역 선택</label>
+            <label><input type="radio" id="mosaic-effect" name="effect" checked> 모자이크 효과</label>
+            <label><input type="radio" id="transparency-effect" name="effect"> 반투명 효과</label>
+            <label><input type="radio" id="blurEffect-effect" name="effect"> 블러 효과</label>
         </div>
+        
+        <label><input type="checkbox" id="select-all"> 전체 영역 선택</label>
     </div>
     <div>
         <label for="stamp-width">스탬프 너비:</label>
@@ -185,70 +182,85 @@
             const y = e.clientY - rect.top;
 
             let region;
-    switch (stampShape) {
-        case "rectangle":
-            region = {
-                x: Math.round(x - stampWidth / 2),
-                y: Math.round(y - stampHeight / 2),
-                width: stampWidth,
-                height: stampHeight,
-                shape: "rectangle",
-            };
-            break;
-        case "circle":
-            region = {
-                x: Math.round(x - stampWidth / 2), // 원의 시작점 (bounding box)
-                y: Math.round(y - stampHeight / 2),
-                width: stampWidth,
-                height: stampHeight,
-                shape: "circle",
-            };
-            break;
-        case "triangle":
-            region = {
-                x: Math.round(x - stampWidth / 2), // 삼각형의 기준점 (bounding box)
-                y: Math.round(y - stampHeight / 2),
-                width: stampWidth,
-                height: stampHeight,
-                shape: "triangle",
-                rotation: triangleRotation, // 삼각형 회전 각도 추가
-            };
-            break;
-    }
-    selectedRegions.push(region);
+            switch (stampShape) {
+                case "rectangle":
+                    region = {
+                        x: Math.round(x - stampWidth / 2),
+                        y: Math.round(y - stampHeight / 2),
+                        width: stampWidth,
+                        height: stampHeight,
+                        shape: "rectangle",
+                        rotation: triangleRotation
+                    };
+                    break;
+                case "circle":
+                    region = {
+                        x: Math.round(x - stampWidth / 2), // 원의 시작점 (bounding box)
+                        y: Math.round(y - stampHeight / 2),
+                        width: stampWidth,
+                        height: stampHeight,
+                        shape: "circle",
+                        rotation: triangleRotation
+                    };
+                    break;
+                case "triangle":
+                    region = {
+                        x: Math.round(x - stampWidth / 2), // 삼각형의 기준점 (bounding box)
+                        y: Math.round(y - stampHeight / 2),
+                        width: stampWidth,
+                        height: stampHeight,
+                        shape: "triangle",
+                        rotation: triangleRotation, // 삼각형 회전 각도 추가
+                    };
+                    break;
+            }
+            selectedRegions.push(region);
 
- // 캔버스에 스탬프 표시
- ctx.strokeStyle = "red";
-    ctx.lineWidth = 2;
-    switch (stampShape) {
-        case "rectangle":
-            ctx.strokeRect(region.x, region.y, region.width, region.height);
-            break;
-        case "circle":
-            ctx.beginPath();
-            ctx.ellipse(
-                region.x + region.width / 2,
-                region.y + region.height / 2,
-                region.width / 2,
-                region.height / 2,
-                0,
-                0,
-                2 * Math.PI
-            );
-            ctx.stroke();
-            break;
-        case "triangle":
-            rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, triangleRotation, () => {
-                ctx.beginPath();
-                ctx.moveTo(0, -region.height / 2); // 위쪽 점
-                ctx.lineTo(-region.width / 2, region.height / 2); // 왼쪽 아래 점
-                ctx.lineTo(region.width / 2, region.height / 2); // 오른쪽 아래 점
-                ctx.closePath();
-                ctx.stroke();
-            });
-            break;
-    }
-});
+            // 캔버스에 스탬프 표시
+            drawRegion(ctx, region);
+        });
+
+        function drawRegion(ctx, region) {
+            ctx.strokeStyle = "red";
+            ctx.lineWidth = 2;
+
+            switch (region.shape) {
+                case "rectangle":
+                    rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, region.rotation, () => {
+                        ctx.strokeRect(-region.width / 2, -region.height / 2, region.width, region.height);
+                    });
+                    break;
+                case "circle":
+                    ctx.beginPath();
+                    ctx.ellipse(
+                        region.x + region.width / 2,
+                        region.y + region.height / 2,
+                        region.width / 2,
+                        region.height / 2,
+                        0,
+                        0,
+                        2 * Math.PI
+                    );
+                    ctx.stroke();
+                    break;
+                case "triangle":
+                    rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, region.rotation, () => {
+                        ctx.beginPath();
+                        ctx.moveTo(0, -region.height / 2); // 위쪽 점
+                        ctx.lineTo(-region.width / 2, region.height / 2); // 왼쪽 아래 점
+                        ctx.lineTo(region.width / 2, region.height / 2); // 오른쪽 아래 점
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                    break;
+            }
+        }
+
+
+
+
+
+
 
         uploadButton.addEventListener("click", () => {
             const file = fileInput.files[0];
@@ -348,97 +360,98 @@
 
 
         // 회전 함수 추가
-function rotateShape(ctx, x, y, angle, drawFn) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate((angle * Math.PI) / 180);
-    drawFn();
-    ctx.restore();
-}
-
-// 삼각형 회전 각도 추가
-let triangleRotation = 0; // 기본 각도 0
-const triangleRotationInput = document.createElement("input");
-triangleRotationInput.type = "number";
-triangleRotationInput.value = "0";
-triangleRotationInput.min = "0";
-triangleRotationInput.max = "360";
-triangleRotationInput.step = "1";
-triangleRotationInput.addEventListener("input", () => {
-    triangleRotation = parseInt(triangleRotationInput.value);
-});
-document.getElementById("controls").appendChild(document.createElement("br"));
-document.getElementById("controls").appendChild(document.createTextNode("삼각형 회전 각도:"));
-document.getElementById("controls").appendChild(triangleRotationInput);
-
-// 캔버스 그리기 로직 업데이트
-canvas.addEventListener("mousemove", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (uploadedImage) {
-        ctx.drawImage(uploadedImage, 0, 0);
-    }
-
-    selectedRegions.forEach((region) => {
-        ctx.strokeStyle = "red";
-        ctx.lineWidth = 2;
-        switch (region.shape) {
-            case "rectangle":
-                ctx.strokeRect(region.x, region.y, region.width, region.height);
-                break;
-            case "circle":
-                ctx.beginPath();
-                ctx.ellipse(
-                    region.x + region.width / 2,
-                    region.y + region.height / 2,
-                    region.width / 2,
-                    region.height / 2,
-                    0,
-                    0,
-                    2 * Math.PI
-                );
-                ctx.stroke();
-                break;
-            case "triangle":
-                rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, triangleRotation, () => {
-                    ctx.beginPath();
-                    ctx.moveTo(0, -region.height / 2); // 위쪽 점
-                    ctx.lineTo(-region.width / 2, region.height / 2); // 왼쪽 아래 점
-                    ctx.lineTo(region.width / 2, region.height / 2); // 오른쪽 아래 점
-                    ctx.closePath();
-                    ctx.stroke();
-                });
-                break;
+        function rotateShape(ctx, x, y, angle, drawFn) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate((angle * Math.PI) / 180);
+            drawFn();
+            ctx.restore();
         }
-    });
 
-    ctx.strokeStyle = "blue";
-    ctx.lineWidth = 1;
-    switch (stampShape) {
-        case "rectangle":
-            ctx.strokeRect(x - stampWidth / 2, y - stampHeight / 2, stampWidth, stampHeight);
-            break;
-        case "circle":
-            ctx.beginPath();
-            ctx.ellipse(x, y, stampWidth / 2, stampHeight / 2, 0, 0, 2 * Math.PI);
-            ctx.stroke();
-            break;
-        case "triangle":
-            rotateShape(ctx, x, y, triangleRotation, () => {
-                ctx.beginPath();
-                ctx.moveTo(0, -stampHeight / 2); // 위쪽 점
-                ctx.lineTo(-stampWidth / 2, stampHeight / 2); // 왼쪽 아래 점
-                ctx.lineTo(stampWidth / 2, stampHeight / 2); // 오른쪽 아래 점
-                ctx.closePath();
-                ctx.stroke();
+        // 삼각형 회전 각도 추가
+        let triangleRotation = 0; // 기본 각도 0
+        const triangleRotationInput = document.createElement("input");
+        triangleRotationInput.type = "number";
+        triangleRotationInput.value = "0";
+        triangleRotationInput.min = "0";
+        triangleRotationInput.max = "360";
+        triangleRotationInput.step = "1";
+        triangleRotationInput.addEventListener("input", () => {
+            triangleRotation = parseInt(triangleRotationInput.value);
+        });
+        
+        document.getElementById("controls").appendChild(document.createElement("br"));
+        document.getElementById("controls").appendChild(document.createTextNode("스템프 회전 각도:"));
+        document.getElementById("controls").appendChild(triangleRotationInput);
+
+        // 캔버스 그리기 로직 업데이트
+        canvas.addEventListener("mousemove", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (uploadedImage) {
+                ctx.drawImage(uploadedImage, 0, 0);
+            }
+
+            selectedRegions.forEach((region) => {
+                ctx.strokeStyle = "red";
+                ctx.lineWidth = 2;
+                switch (region.shape) {
+                    case "rectangle":
+                        ctx.strokeRect(region.x, region.y, region.width, region.height);
+                        break;
+                    case "circle":
+                        ctx.beginPath();
+                        ctx.ellipse(
+                            region.x + region.width / 2,
+                            region.y + region.height / 2,
+                            region.width / 2,
+                            region.height / 2,
+                            0,
+                            0,
+                            2 * Math.PI
+                        );
+                        ctx.stroke();
+                        break;
+                    case "triangle":
+                        rotateShape(ctx, region.x + region.width / 2, region.y + region.height / 2, triangleRotation, () => {
+                            ctx.beginPath();
+                            ctx.moveTo(0, -region.height / 2); // 위쪽 점
+                            ctx.lineTo(-region.width / 2, region.height / 2); // 왼쪽 아래 점
+                            ctx.lineTo(region.width / 2, region.height / 2); // 오른쪽 아래 점
+                            ctx.closePath();
+                            ctx.stroke();
+                        });
+                        break;
+                }
             });
-            break;
-    }
-});
+
+            ctx.strokeStyle = "blue";
+            ctx.lineWidth = 1;
+            switch (stampShape) {
+                case "rectangle":
+                    ctx.strokeRect(x - stampWidth / 2, y - stampHeight / 2, stampWidth, stampHeight);
+                    break;
+                case "circle":
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, stampWidth / 2, stampHeight / 2, 0, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    break;
+                case "triangle":
+                    rotateShape(ctx, x, y, triangleRotation, () => {
+                        ctx.beginPath();
+                        ctx.moveTo(0, -stampHeight / 2); // 위쪽 점
+                        ctx.lineTo(-stampWidth / 2, stampHeight / 2); // 왼쪽 아래 점
+                        ctx.lineTo(stampWidth / 2, stampHeight / 2); // 오른쪽 아래 점
+                        ctx.closePath();
+                        ctx.stroke();
+                    });
+                    break;
+            }
+        });
 
     </script>
 </body>
